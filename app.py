@@ -46,8 +46,8 @@ def formatar_telefone(numero):
     else:
         return numero # Se for um número inválido/curto demais, mantém original
 
-st.title("📊 Limpeza de Planilhas Inteligente")
-st.markdown("Faça o upload da sua planilha (ex: **TATA 1K.xlsx**) para identificar e tratar dados duplicados.")
+st.title("📊 Limpeza e União de Planilhas")
+st.markdown("Faça o upload de **uma ou várias planilhas** (ex: **TATA 1K.xlsx**) para uni-las, formatar os telefones e remover duplicadas.")
 
 # 2. Gerenciamento de Estado
 if 'step' not in st.session_state:
@@ -55,24 +55,35 @@ if 'step' not in st.session_state:
 if 'df' not in st.session_state:
     st.session_state.df = None
 
-# --- TELA 1: UPLOAD ---
+# --- TELA 1: UPLOAD DE MÚLTIPLOS ARQUIVOS ---
 if st.session_state.step == 'upload':
-    uploaded_file = st.file_uploader("Arraste ou selecione seu arquivo Excel (.xlsx)", type=["xlsx"])
+    # Habilitamos o accept_multiple_files=True
+    uploaded_files = st.file_uploader("Arraste ou selecione seus arquivos Excel (.xlsx)", type=["xlsx"], accept_multiple_files=True)
     
-    if uploaded_file is not None:
-        df = pd.read_excel(uploaded_file)
+    if uploaded_files:
+        st.info(f"📁 Você selecionou {len(uploaded_files)} arquivo(s). Adicione mais se precisar!")
         
-        # CORREÇÃO APLICADA AQUI: 
-        # Convertendo os nomes das colunas para minúsculo na hora da verificação
-        # Isso impede erros caso o cabeçalho esteja como TELEFONE, Telefone, telefone, etc.
-        colunas_telefone = ['telefone', 'celular', 'contato', 'numero']
-        for col in df.columns:
-            if str(col).lower().strip() in colunas_telefone:
-                df[col] = df[col].apply(formatar_telefone)
-        
-        st.session_state.df = df
-        st.session_state.step = 'analise'
-        st.rerun()
+        # O botão garante que o usuário terminou de subir tudo antes de processar
+        if st.button("Juntar e Analisar Planilhas", type="primary"):
+            lista_dfs = []
+            
+            # Lê cada planilha anexada e guarda na lista
+            for file in uploaded_files:
+                df_temp = pd.read_excel(file)
+                lista_dfs.append(df_temp)
+            
+            # Junta todas as planilhas em uma única!
+            df = pd.concat(lista_dfs, ignore_index=True)
+            
+            # Formata a coluna de telefone na planilha unificada
+            colunas_telefone = ['telefone', 'celular', 'contato', 'numero']
+            for col in df.columns:
+                if str(col).lower().strip() in colunas_telefone:
+                    df[col] = df[col].apply(formatar_telefone)
+            
+            st.session_state.df = df
+            st.session_state.step = 'analise'
+            st.rerun()
 
 # --- TELA 2: ANÁLISE DE DUPLICADOS ---
 if st.session_state.step == 'analise':
@@ -81,18 +92,18 @@ if st.session_state.step == 'analise':
     duplicados = df[df.duplicated(keep=False)]
     
     if duplicados.empty:
-        st.success("✨ Parabéns! Nenhuma linha duplicada foi encontrada na sua planilha.")
+        st.success("✨ Parabéns! Nenhuma linha duplicada foi encontrada na sua base unificada.")
         st.dataframe(df, use_container_width=True)
         
         excel_data = to_excel(df)
-        st.download_button("📥 Baixar Planilha Formatada", data=excel_data, file_name="planilha_formatada.xlsx")
+        st.download_button("📥 Baixar Planilha Final", data=excel_data, file_name="planilha_unificada_formatada.xlsx")
         
-        if st.button("Sair / Anexar Outra"):
+        if st.button("Sair / Iniciar Novamente"):
             st.session_state.step = 'upload'
             st.session_state.df = None
             st.rerun()
     else:
-        st.warning(f"⚠️ Encontramos {df.duplicated().sum()} linhas duplicadas. Veja abaixo:")
+        st.warning(f"⚠️ Encontramos {df.duplicated().sum()} linhas duplicadas após juntar os arquivos. Veja abaixo:")
         st.dataframe(duplicados, use_container_width=True)
         
         st.markdown("### O que você deseja fazer?")
@@ -118,7 +129,7 @@ if st.session_state.step == 'excluir':
     # Remove duplicatas mantendo a primeira ocorrência
     df_clean = df.drop_duplicates()
     
-    st.success("✅ Duplicatas excluídas com sucesso! Apenas registros únicos foram mantidos.")
+    st.success(f"✅ Sucesso! Planilhas unidas e duplicatas excluídas. Sua base final tem {len(df_clean)} linhas exclusivas.")
     st.dataframe(df_clean, use_container_width=True)
     
     excel_data = to_excel(df_clean)
@@ -126,7 +137,7 @@ if st.session_state.step == 'excluir':
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📥 Baixar Planilha Limpa", data=excel_data, file_name="planilha_sem_duplicatas.xlsx")
+        st.download_button("📥 Baixar Planilha Limpa e Unida", data=excel_data, file_name="planilha_sem_duplicatas.xlsx")
     with col2:
         if st.button("Voltar ao Início"):
             st.session_state.step = 'upload'
