@@ -7,7 +7,7 @@ from openpyxl.utils import get_column_letter
 
 # 1. Configuração da página - Novo Nome
 st.set_page_config(
-    page_title="Central de Dados", 
+    page_title="Radar Político", 
     page_icon="📱", 
     layout="centered"
 )
@@ -181,7 +181,7 @@ if 'uploader_key' not in st.session_state:
 
 # --- TELA PRINCIPAL (UI) ---
 
-st.markdown("<h1>📱 Central de Dados</h1>", unsafe_allow_html=True)
+st.markdown("<h1>📱 Radar Político</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #555;'>Unifique planilhas e arquivos de texto, formate contatos e organize automaticamente.</p>", unsafe_allow_html=True)
 
 col1, col2 = st.columns([3, 1])
@@ -260,7 +260,7 @@ if st.session_state.df_final is not None:
     st.download_button(
         label="📥 Baixar Planilha", 
         data=excel_pronto, 
-        file_name="Central_de_Dados_Limpa.xlsx", 
+        file_name="Radar_Politico_Limpo.xlsx", 
         type="primary"
     )
     
