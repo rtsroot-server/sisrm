@@ -5,14 +5,14 @@ import re
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-# 1. Configuração da página - Foco Mobile
+# 1. Configuração da página - Novo Nome
 st.set_page_config(
-    page_title="Gestor de Contatos", 
+    page_title="Central de Dados", 
     page_icon="📱", 
     layout="centered"
 )
 
-# 2. CSS Customizado - Layout de Aplicativo
+# 2. CSS Customizado
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -176,56 +176,76 @@ def gerar_excel_final(df):
 if 'df_final' not in st.session_state:
     st.session_state.df_final = None
 
-# Nova variável para controlar o "reset" do botão de upload
 if 'uploader_key' not in st.session_state:
     st.session_state.uploader_key = 0
 
 # --- TELA PRINCIPAL (UI) ---
 
-st.markdown("<h1>📱 App de Triagem</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #555;'>Unifique planilhas, formate contatos e organize por bairros automaticamente.</p>", unsafe_allow_html=True)
+st.markdown("<h1>📱 Central de Dados</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #555;'>Unifique planilhas e arquivos de texto, formate contatos e organize automaticamente.</p>", unsafe_allow_html=True)
 
-# Layout com colunas para colocar o botão de limpar ao lado
 col1, col2 = st.columns([3, 1])
 
 with col1:
+    # Atualizado para aceitar csv e txt além de xlsx
     uploaded_files = st.file_uploader(
-        "Toque ou arraste as planilhas aqui", 
-        type=["xlsx"], 
+        "Toque ou arraste os arquivos aqui", 
+        type=["xlsx", "csv", "txt"], 
         accept_multiple_files=True,
-        key=str(st.session_state.uploader_key) # A chave que o botão limpar vai alterar
+        key=str(st.session_state.uploader_key)
     )
 
 with col2:
-    # Espaçamento para o botão descer e ficar alinhado com o meio da caixa de upload no computador
     st.markdown("<div style='margin-top: 35px;'></div>", unsafe_allow_html=True)
     if st.button("🗑️ Limpar Arquivos"):
-        st.session_state.uploader_key += 1 # Muda o ID, fazendo o uploader zerar
+        st.session_state.uploader_key += 1 
         st.session_state.df_final = None
         st.rerun()
 
 if uploaded_files:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 Processar Contatos", type="primary"):
-        with st.spinner("Analisando e limpando dados..."):
+        with st.spinner("Lendo e padronizando arquivos..."):
             lista_dfs = []
             
             for file in uploaded_files:
-                df_bruto = pd.read_excel(file)
-                df_limpo = processar_planilha(df_bruto)
-                lista_dfs.append(df_limpo)
-            
-            df_unificado = pd.concat(lista_dfs, ignore_index=True)
-            
-            total_antes = len(df_unificado)
-            df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='first')
-            df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
-            
-            total_depois = len(df_final)
-            duplicadas = total_antes - total_depois
-            
-            st.session_state.df_final = df_final
-            st.success(f"✨ Pronto! {duplicadas} telefones repetidos foram excluídos.")
+                extensao = file.name.split('.')[-1].lower()
+                
+                try:
+                    # Lógica inteligente de leitura baseada no formato do arquivo
+                    if extensao == 'csv':
+                        try:
+                            # Tenta ler CSV padrão separado por vírgula
+                            df_bruto = pd.read_csv(file)
+                        except:
+                            # Se falhar, tenta ler separado por ponto e vírgula (padrão Excel BR)
+                            file.seek(0)
+                            df_bruto = pd.read_csv(file, sep=';', encoding='latin-1')
+                    elif extensao == 'txt':
+                        # TXTs geralmente vêm separados por tabulação (Tab)
+                        df_bruto = pd.read_csv(file, sep='\t')
+                    else:
+                        # Padrão XLSX
+                        df_bruto = pd.read_excel(file)
+                    
+                    df_limpo = processar_planilha(df_bruto)
+                    lista_dfs.append(df_limpo)
+                    
+                except Exception as e:
+                    st.error(f"Não foi possível ler o arquivo {file.name}. Verifique se ele não está corrompido.")
+
+            if lista_dfs:
+                df_unificado = pd.concat(lista_dfs, ignore_index=True)
+                
+                total_antes = len(df_unificado)
+                df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='first')
+                df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
+                
+                total_depois = len(df_final)
+                duplicadas = total_antes - total_depois
+                
+                st.session_state.df_final = df_final
+                st.success(f"✨ Pronto! {duplicadas} telefones repetidos foram excluídos.")
 
 if st.session_state.df_final is not None:
     df_resultado = st.session_state.df_final
@@ -236,15 +256,16 @@ if st.session_state.df_final is not None:
     excel_pronto = gerar_excel_final(df_resultado)
     
     st.markdown("<br>", unsafe_allow_html=True)
+    # Novo nome do botão conforme solicitado
     st.download_button(
-        label="📥 Baixar Planilha Separada", 
+        label="📥 Baixar Planilha", 
         data=excel_pronto, 
-        file_name="Contatos_Limpos_App.xlsx", 
+        file_name="Central_de_Dados_Limpa.xlsx", 
         type="primary"
     )
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Iniciar Novo Processo"):
         st.session_state.df_final = None
-        st.session_state.uploader_key += 1 # Zera o uploader aqui também!
+        st.session_state.uploader_key += 1 
         st.rerun()
