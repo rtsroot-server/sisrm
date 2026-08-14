@@ -2,164 +2,249 @@ import streamlit as st
 import pandas as pd
 import io
 import re
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
-# 1. Configuração da página e Layout UX
+# 1. Configuração da página - Foco Mobile
 st.set_page_config(
-    page_title="Gestor de Planilhas", 
-    page_icon="📊", 
+    page_title="Gestor de Contatos", 
+    page_icon="📱", 
     layout="centered"
 )
 
-# CSS Customizado para deixar os botões e a tela mais bonitos
+# 2. CSS Customizado - Layout de Aplicativo
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; }
-    h1 { color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stApp { background-color: #f4f7f6; }
+    h1, h2, h3 { color: #1e3d59; font-family: 'Segoe UI', sans-serif; text-align: center; }
+    .stButton>button { 
+        width: 100%; border-radius: 25px; font-weight: bold; 
+        background-color: #17c3b2; color: white; border: none;
+        padding: 12px 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background-color: #13a294; transform: translateY(-2px); box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+    }
+    [data-testid="stFileUploadDropzone"] {
+        border-radius: 20px; border: 2px dashed #17c3b2; background-color: #ffffff;
+        padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    .stAlert { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
-# Função para converter o dataframe para Excel e permitir o download
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Planilha1')
-    return output.getvalue()
+# --- FUNÇÕES DE LÓGICA ---
 
-# Função: Formatar o Telefone para ( 21 ) XXXXX-XXXX
 def formatar_telefone(numero):
-    if pd.isna(numero) or numero == "":
-        return numero
-    
-    # Remove tudo que não for número (tira espaços, letras, traços antigos)
+    if pd.isna(numero) or str(numero).strip() == "":
+        return ""
     numeros_limpos = re.sub(r'\D', '', str(numero))
-    
     if len(numeros_limpos) == 0:
-        return numero
-        
-    # Pega os últimos 9 dígitos (para ignorar códigos de país ou DDDs antigos)
-    if len(numeros_limpos) >= 9:
-        cel = numeros_limpos[-9:]
-        return f"( 21 ) {cel[:5]}-{cel[5:]}"
-    # Se a pessoa digitou só 8 números (esqueceu o 9), ele adiciona o 9
+        return ""
+    if len(numeros_limpos) == 11:
+        return f"( {numeros_limpos[:2]} ) {numeros_limpos[2:7]}-{numeros_limpos[7:]}"
+    elif len(numeros_limpos) == 10:
+        return f"( {numeros_limpos[:2]} ) 9{numeros_limpos[2:6]}-{numeros_limpos[6:]}"
+    elif len(numeros_limpos) == 9:
+        return f"( 21 ) {numeros_limpos[:5]}-{numeros_limpos[5:]}"
     elif len(numeros_limpos) == 8:
         return f"( 21 ) 9{numeros_limpos[:4]}-{numeros_limpos[4:]}"
     else:
-        return numero # Se for um número inválido/curto demais, mantém original
+        return numeros_limpos
 
-st.title("📊 Limpeza e União de Planilhas")
-st.markdown("Faça o upload de **uma ou várias planilhas** (ex: **TATA 1K.xlsx**) para uni-las, formatar os telefones e remover duplicadas.")
-
-# 2. Gerenciamento de Estado
-if 'step' not in st.session_state:
-    st.session_state.step = 'upload'
-if 'df' not in st.session_state:
-    st.session_state.df = None
-
-# --- TELA 1: UPLOAD DE MÚLTIPLOS ARQUIVOS ---
-if st.session_state.step == 'upload':
-    # Habilitamos o accept_multiple_files=True
-    uploaded_files = st.file_uploader("Arraste ou selecione seus arquivos Excel (.xlsx)", type=["xlsx"], accept_multiple_files=True)
+def limpar_nome_e_bairro(nome_raw, bairro_raw):
+    nome = str(nome_raw).strip()
+    bairro = str(bairro_raw).strip()
     
-    if uploaded_files:
-        st.info(f"📁 Você selecionou {len(uploaded_files)} arquivo(s). Adicione mais se precisar!")
+    if " - " in nome or "-" in nome:
+        partes = nome.split("-", 1)
+        nome = partes[0].strip()
+        bairro_extraido = partes[1].strip()
+        if not bairro or bairro.lower() == 'nan':
+            bairro = bairro_extraido
+
+    bairro_lower = bairro.lower()
+    bairro_invalido = False
+    bairro_sem_espacos = bairro.replace(" ", "")
+    
+    if not bairro or bairro_lower == 'nan':
+        bairro_invalido = True
+    elif re.search(r'\d', bairro): 
+        bairro_invalido = True
+    elif len(bairro_sem_espacos) <= 3: 
+        bairro_invalido = True
+    elif "." in bairro and len(bairro_sem_espacos) <= 5: 
+        bairro_invalido = True
+    else:
+        palavras_proibidas = ['gato', 'cachorro', 'cadela', 'adotou', 'adotante', 'devolveu', 'macho', 'fêmea', 'femea', 'filhote', 'pet', 'aa.c']
+        for palavra in palavras_proibidas:
+            if palavra in bairro_lower:
+                bairro_invalido = True
+                break
+                
+    if bairro_invalido:
+        bairro = "Sem Bairro"
         
-        # O botão garante que o usuário terminou de subir tudo antes de processar
-        if st.button("Juntar e Analisar Planilhas", type="primary"):
+    return nome.title(), bairro.title()
+
+def processar_planilha(df):
+    tel_col = None
+    nome_col = None
+    bairro_col = None
+    
+    for c in df.columns:
+        c_lower = str(c).lower().strip()
+        if c_lower in ['telefone', 'celular', 'contato', 'numero']:
+            tel_col = c
+        elif 'nome' in c_lower or 'cliente' in c_lower:
+            nome_col = c
+        elif c_lower in ['região', 'regiao', 'bairro', 'unnamed: 1']:
+            bairro_col = c
+
+    dados_padronizados = []
+    
+    for _, row in df.iterrows():
+        n_raw = str(row[nome_col]) if nome_col and not pd.isna(row[nome_col]) else "Sem Nome"
+        b_raw = str(row[bairro_col]) if bairro_col and not pd.isna(row[bairro_col]) else ""
+        t_raw = str(row[tel_col]) if tel_col and not pd.isna(row[tel_col]) else ""
+        
+        nome_limpo, bairro_limpo = limpar_nome_e_bairro(n_raw, b_raw)
+        tel_formatado = formatar_telefone(t_raw)
+        
+        if tel_formatado != "":
+            dados_padronizados.append({
+                "Região/Bairro": bairro_limpo,
+                "Nome": nome_limpo,
+                "Telefone": tel_formatado
+            })
+            
+    return pd.DataFrame(dados_padronizados)
+
+def gerar_excel_final(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        bairros = df['Região/Bairro'].unique()
+        
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="17C3B2", end_color="17C3B2", fill_type="solid")
+        
+        abas_usadas = {} 
+        
+        for bairro in bairros:
+            nome_limpo_excel = re.sub(r'[\\/*?:\[\]]', '-', str(bairro)).strip()
+            nome_aba_base = nome_limpo_excel[:31]
+            if not nome_aba_base:
+                nome_aba_base = "Sem Bairro"
+                
+            nome_aba = nome_aba_base
+            contador = 1
+            while nome_aba in abas_usadas.values():
+                sufixo = str(contador)
+                nome_aba = nome_aba_base[:31 - len(sufixo)] + sufixo
+                contador += 1
+                
+            abas_usadas[bairro] = nome_aba
+                
+            df_bairro = df[df['Região/Bairro'] == bairro].copy()
+            df_bairro['Agendamento de Visita'] = "" 
+            
+            df_bairro = df_bairro[['Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
+            df_bairro.to_excel(writer, index=False, sheet_name=nome_aba)
+            
+            worksheet = writer.sheets[nome_aba]
+            for col_num, column_title in enumerate(df_bairro.columns, 1):
+                col_letra = get_column_letter(col_num)
+                
+                if column_title == 'Nome':
+                    worksheet.column_dimensions[col_letra].width = 35
+                elif column_title == 'Agendamento de Visita':
+                    worksheet.column_dimensions[col_letra].width = 40
+                else:
+                    worksheet.column_dimensions[col_letra].width = 25
+                
+                celula = worksheet.cell(row=1, column=col_num)
+                celula.font = header_font
+                celula.fill = header_fill
+                celula.alignment = Alignment(horizontal='center', vertical='center')
+
+    return output.getvalue()
+
+# --- GERENCIAMENTO DE ESTADO ---
+if 'df_final' not in st.session_state:
+    st.session_state.df_final = None
+
+# Nova variável para controlar o "reset" do botão de upload
+if 'uploader_key' not in st.session_state:
+    st.session_state.uploader_key = 0
+
+# --- TELA PRINCIPAL (UI) ---
+
+st.markdown("<h1>📱 App de Triagem</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #555;'>Unifique planilhas, formate contatos e organize por bairros automaticamente.</p>", unsafe_allow_html=True)
+
+# Layout com colunas para colocar o botão de limpar ao lado
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    uploaded_files = st.file_uploader(
+        "Toque ou arraste as planilhas aqui", 
+        type=["xlsx"], 
+        accept_multiple_files=True,
+        key=str(st.session_state.uploader_key) # A chave que o botão limpar vai alterar
+    )
+
+with col2:
+    # Espaçamento para o botão descer e ficar alinhado com o meio da caixa de upload no computador
+    st.markdown("<div style='margin-top: 35px;'></div>", unsafe_allow_html=True)
+    if st.button("🗑️ Limpar Arquivos"):
+        st.session_state.uploader_key += 1 # Muda o ID, fazendo o uploader zerar
+        st.session_state.df_final = None
+        st.rerun()
+
+if uploaded_files:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚀 Processar Contatos", type="primary"):
+        with st.spinner("Analisando e limpando dados..."):
             lista_dfs = []
             
-            # Lê cada planilha anexada e guarda na lista
             for file in uploaded_files:
-                df_temp = pd.read_excel(file)
-                lista_dfs.append(df_temp)
+                df_bruto = pd.read_excel(file)
+                df_limpo = processar_planilha(df_bruto)
+                lista_dfs.append(df_limpo)
             
-            # Junta todas as planilhas em uma única!
-            df = pd.concat(lista_dfs, ignore_index=True)
+            df_unificado = pd.concat(lista_dfs, ignore_index=True)
             
-            # Formata a coluna de telefone na planilha unificada
-            colunas_telefone = ['telefone', 'celular', 'contato', 'numero']
-            for col in df.columns:
-                if str(col).lower().strip() in colunas_telefone:
-                    df[col] = df[col].apply(formatar_telefone)
+            total_antes = len(df_unificado)
+            df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='first')
+            df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
             
-            st.session_state.df = df
-            st.session_state.step = 'analise'
-            st.rerun()
+            total_depois = len(df_final)
+            duplicadas = total_antes - total_depois
+            
+            st.session_state.df_final = df_final
+            st.success(f"✨ Pronto! {duplicadas} telefones repetidos foram excluídos.")
 
-# --- TELA 2: ANÁLISE DE DUPLICADOS ---
-if st.session_state.step == 'analise':
-    df = st.session_state.df
+if st.session_state.df_final is not None:
+    df_resultado = st.session_state.df_final
     
-    duplicados = df[df.duplicated(keep=False)]
+    st.markdown("### 📊 Pré-visualização")
+    st.dataframe(df_resultado, use_container_width=True)
     
-    if duplicados.empty:
-        st.success("✨ Parabéns! Nenhuma linha duplicada foi encontrada na sua base unificada.")
-        st.dataframe(df, use_container_width=True)
-        
-        excel_data = to_excel(df)
-        st.download_button("📥 Baixar Planilha Final", data=excel_data, file_name="planilha_unificada_formatada.xlsx")
-        
-        if st.button("Sair / Iniciar Novamente"):
-            st.session_state.step = 'upload'
-            st.session_state.df = None
-            st.rerun()
-    else:
-        st.warning(f"⚠️ Encontramos {df.duplicated().sum()} linhas duplicadas após juntar os arquivos. Veja abaixo:")
-        st.dataframe(duplicados, use_container_width=True)
-        
-        st.markdown("### O que você deseja fazer?")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("🗑️ Excluir", type="primary", help="Remove as duplicatas e mantém apenas a primeira"):
-                st.session_state.step = 'excluir'
-                st.rerun()
-        with col2:
-            if st.button("✏️ Alterar", help="Edite a planilha manualmente"):
-                st.session_state.step = 'alterar'
-                st.rerun()
-        with col3:
-            if st.button("🚪 Sair", help="Volta para a tela de upload"):
-                st.session_state.step = 'upload'
-                st.session_state.df = None
-                st.rerun()
-
-# --- TELA 3: EXCLUIR DUPLICADOS ---
-if st.session_state.step == 'excluir':
-    df = st.session_state.df
-    # Remove duplicatas mantendo a primeira ocorrência
-    df_clean = df.drop_duplicates()
+    excel_pronto = gerar_excel_final(df_resultado)
     
-    st.success(f"✅ Sucesso! Planilhas unidas e duplicatas excluídas. Sua base final tem {len(df_clean)} linhas exclusivas.")
-    st.dataframe(df_clean, use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.download_button(
+        label="📥 Baixar Planilha Separada", 
+        data=excel_pronto, 
+        file_name="Contatos_Limpos_App.xlsx", 
+        type="primary"
+    )
     
-    excel_data = to_excel(df_clean)
-    
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button("📥 Baixar Planilha Limpa e Unida", data=excel_data, file_name="planilha_sem_duplicatas.xlsx")
-    with col2:
-        if st.button("Voltar ao Início"):
-            st.session_state.step = 'upload'
-            st.session_state.df = None
-            st.rerun()
-
-# --- TELA 4: ALTERAR DADOS ---
-if st.session_state.step == 'alterar':
-    st.info("✏️ Clique duas vezes em qualquer célula abaixo para alterar os valores ou adicione/remova linhas.")
-    df = st.session_state.df
-    
-    # Tabela interativa onde o usuário pode editar os dados como no Excel
-    edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
-    
-    excel_data = to_excel(edited_df)
-    
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button("📥 Baixar Planilha Alterada", data=excel_data, file_name="planilha_alterada.xlsx")
-    with col2:
-        if st.button("Voltar ao Início"):
-            st.session_state.step = 'upload'
-            st.session_state.df = None
-            st.rerun()
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔄 Iniciar Novo Processo"):
+        st.session_state.df_final = None
+        st.session_state.uploader_key += 1 # Zera o uploader aqui também!
+        st.rerun()
