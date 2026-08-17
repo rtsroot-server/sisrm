@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import re
+import unicodedata
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
@@ -88,7 +89,11 @@ def limpar_nome_e_bairro(nome_raw, bairro_raw):
     if bairro_invalido:
         bairro = "Sem Bairro"
         
-    return nome.title(), bairro.title()
+    # Unificação de Bairro (Remove acentos e espaços duplos para agrupar bairros iguais)
+    bairro_norm = ''.join(c for c in unicodedata.normalize('NFD', bairro) if unicodedata.category(c) != 'Mn')
+    bairro_norm = re.sub(r'\s+', ' ', bairro_norm).strip().title()
+        
+    return nome.title(), bairro_norm
 
 def processar_planilha(df):
     tel_col = None
@@ -124,6 +129,7 @@ def processar_planilha(df):
     return pd.DataFrame(dados_padronizados)
 
 def gerar_excel_final(df):
+    """Gera o Excel com os dados separados por abas (bairros)."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         bairros = df['Região/Bairro'].unique()
@@ -172,6 +178,37 @@ def gerar_excel_final(df):
 
     return output.getvalue()
 
+def gerar_excel_unico(df):
+    """Gera o Excel completo, sem abas, mantendo todos os bairros na mesma lista."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="17C3B2", end_color="17C3B2", fill_type="solid")
+        
+        df_completo = df.copy()
+        df_completo['Agendamento de Visita'] = "" 
+        df_completo = df_completo[['Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
+        
+        df_completo.to_excel(writer, index=False, sheet_name="Dados Completos")
+        
+        worksheet = writer.sheets["Dados Completos"]
+        for col_num, column_title in enumerate(df_completo.columns, 1):
+            col_letra = get_column_letter(col_num)
+            
+            if column_title == 'Nome':
+                worksheet.column_dimensions[col_letra].width = 35
+            elif column_title == 'Agendamento de Visita':
+                worksheet.column_dimensions[col_letra].width = 40
+            else:
+                worksheet.column_dimensions[col_letra].width = 25
+            
+            celula = worksheet.cell(row=1, column=col_num)
+            celula.font = header_font
+            celula.fill = header_fill
+            celula.alignment = Alignment(horizontal='center', vertical='center')
+
+    return output.getvalue()
+
 # --- GERENCIAMENTO DE ESTADO ---
 if 'df_final' not in st.session_state:
     st.session_state.df_final = None
@@ -187,7 +224,6 @@ st.markdown("<p style='text-align: center; color: #555;'>Unifique planilhas e ar
 col1, col2 = st.columns([3, 1])
 
 with col1:
-    # Atualizado para aceitar csv e txt além de xlsx
     uploaded_files = st.file_uploader(
         "Toque ou arraste os arquivos aqui", 
         type=["xlsx", "csv", "txt"], 
@@ -212,20 +248,15 @@ if uploaded_files:
                 extensao = file.name.split('.')[-1].lower()
                 
                 try:
-                    # Lógica inteligente de leitura baseada no formato do arquivo
                     if extensao == 'csv':
                         try:
-                            # Tenta ler CSV padrão separado por vírgula
                             df_bruto = pd.read_csv(file)
                         except:
-                            # Se falhar, tenta ler separado por ponto e vírgula (padrão Excel BR)
                             file.seek(0)
                             df_bruto = pd.read_csv(file, sep=';', encoding='latin-1')
                     elif extensao == 'txt':
-                        # TXTs geralmente vêm separados por tabulação (Tab)
                         df_bruto = pd.read_csv(file, sep='\t')
                     else:
-                        # Padrão XLSX
                         df_bruto = pd.read_excel(file)
                     
                     df_limpo = processar_planilha(df_bruto)
@@ -238,6 +269,8 @@ if uploaded_files:
                 df_unificado = pd.concat(lista_dfs, ignore_index=True)
                 
                 total_antes = len(df_unificado)
+                
+                # A mágica da exclusão de repetidos continua aqui (garante a base inteira limpa)
                 df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='first')
                 df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
                 
@@ -253,16 +286,32 @@ if st.session_state.df_final is not None:
     st.markdown("### 📊 Pré-visualização")
     st.dataframe(df_resultado, use_container_width=True)
     
-    excel_pronto = gerar_excel_final(df_resultado)
+    # Gera os dois arquivos em memória
+    excel_pronto_abas = gerar_excel_final(df_resultado)
+    excel_pronto_unico = gerar_excel_unico(df_resultado)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    # Novo nome do botão conforme solicitado
-    st.download_button(
-        label="📥 Baixar Planilha", 
-        data=excel_pronto, 
-        file_name="Radar_Politico_Limpo.xlsx", 
-        type="primary"
-    )
+    
+    # Criando duas colunas para posicionar os botões lado a lado
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        st.download_button(
+            label="📥 Baixar Planilha", 
+            data=excel_pronto_abas, 
+            file_name="Radar_Politico_Abas.xlsx", 
+            type="primary",
+            use_container_width=True # Faz o botão ocupar todo o espaço da coluna
+        )
+        
+    with col_btn2:
+        st.download_button(
+            label="📥 Baixar Dados Completos", 
+            data=excel_pronto_unico, 
+            file_name="Radar_Politico_Completo.xlsx", 
+            type="primary",
+            use_container_width=True # Faz o botão ocupar todo o espaço da coluna
+        )
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Iniciar Novo Processo"):
