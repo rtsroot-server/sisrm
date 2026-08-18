@@ -7,7 +7,7 @@ import unicodedata
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-# 1. Configuração da página
+# 1. Configuração da página - UI/UX Premium (Modo Wide)
 st.set_page_config(
     page_title="Radar Político", 
     page_icon="🗺️", 
@@ -40,26 +40,6 @@ st.markdown("""
         padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
     
-    /* Ajuste para os cards nativos do Streamlit ficarem mais bonitos */
-    div[data-testid="metric-container"] {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        padding: 20px;
-        border-radius: 10px;
-        border-top: 5px solid #17c3b2;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        text-align: center;
-    }
-    div[data-testid="metric-container"] label {
-        font-size: 1.1rem !important;
-        font-weight: bold !important;
-        color: #555555 !important;
-    }
-    div[data-testid="metric-container"] div {
-        color: #17c3b2 !important;
-        font-size: 2.5rem !important;
-    }
-    
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #ffffff;
@@ -68,7 +48,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- NOMES DOS ARQUIVOS DE BANCO DE DADOS ---
+# --- NOMES DOS ARQUIVOS DE BANCO DE DADOS (MEMÓRIA PERMANENTE) ---
 MASTER_DB_FILE = "banco_dados_radar.csv"
 CASTRACAO_DB_FILE = "banco_castracao_radar.csv"
 
@@ -81,13 +61,13 @@ def formatar_telefone(numero):
     if len(numeros_limpos) == 0:
         return ""
     if len(numeros_limpos) == 11:
-        return f"( {numeros_limpos[:2]} ) {numeros_limpos[2:7]}-{numeros_limpos[7:]}"
+        return f"({numeros_limpos[:2]}) {numeros_limpos[2:7]}-{numeros_limpos[7:]}"
     elif len(numeros_limpos) == 10:
-        return f"( {numeros_limpos[:2]} ) 9{numeros_limpos[2:6]}-{numeros_limpos[6:]}"
+        return f"({numeros_limpos[:2]}) 9{numeros_limpos[2:6]}-{numeros_limpos[6:]}"
     elif len(numeros_limpos) == 9:
-        return f"( 21 ) {numeros_limpos[:5]}-{numeros_limpos[5:]}"
+        return f"(21) {numeros_limpos[:5]}-{numeros_limpos[5:]}"
     elif len(numeros_limpos) == 8:
-        return f"( 21 ) 9{numeros_limpos[:4]}-{numeros_limpos[4:]}"
+        return f"(21) 9{numeros_limpos[:4]}-{numeros_limpos[4:]}"
     else:
         return numeros_limpos
 
@@ -125,6 +105,7 @@ def limpar_nome_e_bairro(nome_raw, bairro_raw):
         bairro = "Sem Bairro"
         
     bairro_norm = ''.join(c for c in unicodedata.normalize('NFD', bairro) if unicodedata.category(c) != 'Mn')
+    bairro_norm = bairro_norm.replace('.', '. ')
     bairro_norm = re.sub(r'\s+', ' ', bairro_norm).strip().title()
         
     return nome.title(), bairro_norm
@@ -221,7 +202,6 @@ def gerar_excel_unico(df):
         if 'Agendamento de Visita' not in df_completo.columns:
             df_completo['Agendamento de Visita'] = "" 
             
-        # Adiciona a ordem numérica
         df_completo.insert(0, 'Nº', range(1, len(df_completo) + 1))
         
         df_completo = df_completo[['Nº', 'Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
@@ -243,7 +223,7 @@ def gerar_excel_unico(df):
 
     return output.getvalue()
 
-# --- GERENCIAMENTO DE ESTADO GERAL ---
+# --- GERENCIAMENTO DE ESTADO GERAL E PERSISTÊNCIA ---
 
 if 'df_final' not in st.session_state:
     if os.path.exists(MASTER_DB_FILE):
@@ -253,9 +233,17 @@ if 'df_final' not in st.session_state:
 
 if 'df_castracao' not in st.session_state:
     if os.path.exists(CASTRACAO_DB_FILE):
-        st.session_state.df_castracao = pd.read_csv(CASTRACAO_DB_FILE, dtype=str).fillna("")
+        try:
+            df_c = pd.read_csv(CASTRACAO_DB_FILE, dtype=str).fillna("")
+            # Garante que a planilha antiga seja atualizada para o novo formato
+            if "Tipo" not in df_c.columns:
+                st.session_state.df_castracao = pd.DataFrame(columns=["Tipo", "Nome", "Telefone"])
+            else:
+                st.session_state.df_castracao = df_c
+        except:
+            st.session_state.df_castracao = pd.DataFrame(columns=["Tipo", "Nome", "Telefone"])
     else:
-        st.session_state.df_castracao = pd.DataFrame(columns=["Ajuda/Castrar", "Adoção/Adotante"])
+        st.session_state.df_castracao = pd.DataFrame(columns=["Tipo", "Nome", "Telefone"])
 
 if 'uploader_key' not in st.session_state:
     st.session_state.uploader_key = 0
@@ -279,7 +267,7 @@ with st.sidebar:
     )
 
 # ==========================================
-# MÓDULO 1: DASHBOARD (NOVO LAYOUT SIMPLIFICADO)
+# MÓDULO 1: DASHBOARD
 # ==========================================
 if menu_selecionado == "📈 Dashboard":
     st.title("📈 Painel Geral")
@@ -289,35 +277,30 @@ if menu_selecionado == "📈 Dashboard":
     if st.session_state.df_final is not None and not st.session_state.df_final.empty:
         df = st.session_state.df_final
         
-        # Garante que a coluna de agendamentos exista para não dar erro
         if 'Agendamento de Visita' not in df.columns:
             df['Agendamento de Visita'] = ""
             
-        # Cálculos Principais
         total_cadastros = len(df)
         total_agendamentos = len(df[df['Agendamento de Visita'].str.strip() != ""])
         
-        # Primeira Linha: Cards Principais
         col_card1, col_card2 = st.columns(2)
         with col_card1:
-            st.metric(label="Total de Pessoas Cadastradas", value=f"{total_cadastros}")
+            st.markdown(f'<div style="background-color:#ffffff; padding:20px; border-radius:10px; border-top:5px solid #17c3b2; box-shadow:0 4px 6px rgba(0,0,0,0.05); text-align:center;"><p style="font-weight:bold; color:#555; font-size:1.1rem; margin:0;">Total de Pessoas Cadastradas</p><h2 style="color:#17c3b2; font-size:3rem; margin:0;">{total_cadastros}</h2></div>', unsafe_allow_html=True)
         with col_card2:
-            st.metric(label="Total de Agendamentos", value=f"{total_agendamentos}")
+            st.markdown(f'<div style="background-color:#ffffff; padding:20px; border-radius:10px; border-top:5px solid #17c3b2; box-shadow:0 4px 6px rgba(0,0,0,0.05); text-align:center;"><p style="font-weight:bold; color:#555; font-size:1.1rem; margin:0;">Total de Agendamentos</p><h2 style="color:#17c3b2; font-size:3rem; margin:0;">{total_agendamentos}</h2></div>', unsafe_allow_html=True)
             
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br><br>", unsafe_allow_html=True)
         st.subheader("📍 Análise por Região")
         st.write("Selecione um bairro para visualizar o volume específico de contatos cadastrados nele.")
         
-        # Filtro Inteligente (Dropdown)
         lista_bairros = sorted(df['Região/Bairro'].unique())
         bairro_selecionado = st.selectbox("Escolha o Bairro:", lista_bairros)
         
-        # Conta e exibe o bairro selecionado
         total_no_bairro = len(df[df['Região/Bairro'] == bairro_selecionado])
         
         col_filtro1, col_filtro2, col_filtro3 = st.columns([1, 2, 1])
-        with col_filtro2: # Centraliza o Card
-            st.metric(label=f"Total em {bairro_selecionado}", value=total_no_bairro)
+        with col_filtro2:
+            st.markdown(f'<div style="background-color:#ffffff; padding:20px; border-radius:10px; border-top:5px solid #ff9f1c; box-shadow:0 4px 6px rgba(0,0,0,0.05); text-align:center;"><p style="font-weight:bold; color:#555; font-size:1.1rem; margin:0;">Total em {bairro_selecionado}</p><h2 style="color:#ff9f1c; font-size:3rem; margin:0;">{total_no_bairro}</h2></div>', unsafe_allow_html=True)
             
     else:
         st.info("Sua base de dados está vazia no momento. Acesse o menu 'Processamento de Dados' para anexar suas planilhas.")
@@ -383,7 +366,6 @@ elif menu_selecionado == "🔄 Processamento de Dados":
                         df_unificado = df_novos_juntos
                         tamanho_banco_antigo = 0
                     
-                    # Agora prioriza a linha mais RECENTE. Se o usuário subir um agendamento novo, o sistema salva ele.
                     df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='last')
                     df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
                     
@@ -436,7 +418,7 @@ elif menu_selecionado == "🔄 Processamento de Dados":
             st.rerun()
 
 # ==========================================
-# MÓDULO 3: CONTROLE DE CASTRAÇÃO
+# MÓDULO 3: CONTROLE DE CASTRAÇÃO E ADOÇÃO
 # ==========================================
 elif menu_selecionado == "🐾 Controle de Castração":
     st.title("🐾 Controle de Castração e Adoção")
@@ -446,12 +428,16 @@ elif menu_selecionado == "🐾 Controle de Castração":
 
     with st.form("form_castracao", clear_on_submit=True):
         st.subheader("Novo Cadastro")
-        col_form1, col_form2 = st.columns(2)
         
+        # 1. Nova Opção de Escolha (Selectbox)
+        tipo_input = st.selectbox("Selecione a Categoria:", ["Ajuda / Castrar", "Adoção / Adotante"])
+        
+        # 2. Campos de Nome e Telefone
+        col_form1, col_form2 = st.columns(2)
         with col_form1:
-            ajuda_input = st.text_input("Ajuda / Castrar", placeholder="Ex: Gato do vizinho")
+            nome_input = st.text_input("Nome", placeholder="Ex: Maria da Silva")
         with col_form2:
-            adocao_input = st.text_input("Adoção / Adotante", placeholder="Ex: Maria (Aprovada)")
+            telefone_input = st.text_input("Telefone", placeholder="(21) 9XXXX-XXXX")
             
         col_btn_add, col_btn_clear = st.columns(2)
         with col_btn_add:
@@ -460,18 +446,20 @@ elif menu_selecionado == "🐾 Controle de Castração":
             st.form_submit_button("🧹 Limpar Campos")
             
         if submitted:
-            if ajuda_input or adocao_input:
-                nova_linha = pd.DataFrame([{"Ajuda/Castrar": ajuda_input, "Adoção/Adotante": adocao_input}])
+            if nome_input:
+                tel_formatado = formatar_telefone(telefone_input)
+                nova_linha = pd.DataFrame([{"Tipo": tipo_input, "Nome": nome_input, "Telefone": tel_formatado}])
                 st.session_state.df_castracao = pd.concat([st.session_state.df_castracao, nova_linha], ignore_index=True)
                 st.session_state.df_castracao.to_csv(CASTRACAO_DB_FILE, index=False)
                 st.success("Registro adicionado e salvo com sucesso!")
             else:
-                st.warning("Preencha pelo menos um dos campos para incluir.")
+                st.warning("Preencha o Nome para incluir o registro.")
 
     st.markdown("---")
     st.subheader("Base de Registros")
     st.info("💡 **Dica:** Para **Alterar**, clique duas vezes na célula da tabela abaixo. Para **Excluir**, selecione a linha no quadrado à esquerda e aperte a lixeira!")
 
+    # O Painel Logo Abaixo
     df_atualizado = st.data_editor(
         st.session_state.df_castracao,
         num_rows="dynamic",
@@ -484,14 +472,36 @@ elif menu_selecionado == "🐾 Controle de Castração":
         st.session_state.df_castracao.to_csv(CASTRACAO_DB_FILE, index=False)
 
     if not st.session_state.df_castracao.empty:
+        
+        # 3. Gerador de Planilha Exato conforme a "Pasta1 (1).xlsx"
         output_castracao = io.BytesIO()
         with pd.ExcelWriter(output_castracao, engine='openpyxl') as writer:
-            st.session_state.df_castracao.to_excel(writer, index=False, sheet_name="Castração e Adoção")
+            header_font = Font(bold=True)
+            
+            # --- ABA 1: Ajuda / Castrar ---
+            df_ajuda = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Ajuda / Castrar"][["Nome", "Telefone"]]
+            df_ajuda.to_excel(writer, index=False, startrow=1, sheet_name="Planilha1", header=False)
+            ws1 = writer.sheets["Planilha1"]
+            ws1.cell(row=1, column=1, value="ajuda/ castrar").font = header_font
+            ws1.cell(row=2, column=1, value="Nome").font = header_font
+            ws1.cell(row=2, column=2, value="Telefone").font = header_font
+            ws1.column_dimensions['A'].width = 30
+            ws1.column_dimensions['B'].width = 25
+            
+            # --- ABA 2: Adoção / Adotante ---
+            df_adocao = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Adoção / Adotante"][["Nome", "Telefone"]]
+            df_adocao.to_excel(writer, index=False, startrow=1, sheet_name="Planilha2", header=False)
+            ws2 = writer.sheets["Planilha2"]
+            ws2.cell(row=1, column=1, value="adoção/adotante").font = header_font
+            ws2.cell(row=2, column=1, value="Nome").font = header_font
+            ws2.cell(row=2, column=2, value="Telefone").font = header_font
+            ws2.column_dimensions['A'].width = 30
+            ws2.column_dimensions['B'].width = 25
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(
-            label="📥 Baixar Planilha de Castração", 
+            label="📥 Baixar Planilha", 
             data=output_castracao.getvalue(), 
-            file_name="Controle_Castracao_Adocao.xlsx", 
+            file_name="Controle_Castracao.xlsx", 
             type="primary"
         )
