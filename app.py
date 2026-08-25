@@ -212,7 +212,8 @@ def processar_planilha(df):
                 "Agendamento de Visita": a_raw
             })
             
-    return pd.DataFrame(dados_padronizados)
+    # CORREÇÃO AQUI: Força a criação das colunas mesmo se a planilha estiver vazia
+    return pd.DataFrame(dados_padronizados, columns=["Região/Bairro", "Nome", "Telefone", "Agendamento de Visita"])
 
 def gerar_excel_final(df):
     output = io.BytesIO()
@@ -290,7 +291,10 @@ def gerar_excel_unico(df):
 
 if 'df_final' not in st.session_state:
     if os.path.exists(MASTER_DB_FILE):
-        st.session_state.df_final = pd.read_csv(MASTER_DB_FILE, dtype=str).fillna("")
+        try:
+            st.session_state.df_final = pd.read_csv(MASTER_DB_FILE, dtype=str).fillna("")
+        except:
+            st.session_state.df_final = None
     else:
         st.session_state.df_final = None
 
@@ -345,14 +349,12 @@ if menu_selecionado == "📈 Dashboard":
         total_agendamentos = len(df[df['Agendamento de Visita'].str.strip() != ""])
         total_bairros = len(df['Região/Bairro'].unique())
         
-        # Filtro de Bairro Superior
         lista_bairros = sorted(df['Região/Bairro'].unique())
-        bairro_selecionado = st.selectbox("📌 Filtrar dados por Bairro:", lista_bairros)
-        total_no_bairro = len(df[df['Região/Bairro'] == bairro_selecionado])
+        bairro_selecionado = st.selectbox("📌 Filtrar dados por Bairro:", lista_bairros) if len(lista_bairros) > 0 else "Sem Dados"
+        total_no_bairro = len(df[df['Região/Bairro'] == bairro_selecionado]) if len(lista_bairros) > 0 else 0
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Layout de 4 Colunas para os Cards
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -455,27 +457,38 @@ elif menu_selecionado == "🔄 Processamento de Dados":
                 if lista_dfs_novos:
                     df_novos_juntos = pd.concat(lista_dfs_novos, ignore_index=True)
                     
-                    if os.path.exists(MASTER_DB_FILE):
-                        df_antigo = pd.read_csv(MASTER_DB_FILE, dtype=str).fillna("")
-                        df_unificado = pd.concat([df_antigo, df_novos_juntos], ignore_index=True)
-                        tamanho_banco_antigo = len(df_antigo)
+                    # CORREÇÃO AQUI: Verifica se a união não resultou em um dataframe vazio
+                    if df_novos_juntos.empty:
+                        st.warning("⚠️ Nenhum contato válido foi encontrado nas planilhas enviadas. Verifique se possuem números de telefone.")
                     else:
-                        df_unificado = df_novos_juntos
-                        tamanho_banco_antigo = 0
-                    
-                    df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='last')
-                    df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
-                    
-                    tamanho_banco_novo = len(df_final)
-                    novos_adicionados = tamanho_banco_novo - tamanho_banco_antigo
-                    duplicadas_ignoradas = len(df_novos_juntos) - novos_adicionados
-                    
-                    df_final.to_csv(MASTER_DB_FILE, index=False)
-                    st.session_state.df_final = df_final
-                    
-                    st.success(f"✨ Sucesso! {novos_adicionados} contatos novos entraram na base. Dados de agendamento foram lidos e atualizados.")
+                        if os.path.exists(MASTER_DB_FILE):
+                            try:
+                                df_antigo = pd.read_csv(MASTER_DB_FILE, dtype=str).fillna("")
+                            except:
+                                df_antigo = pd.DataFrame(columns=["Região/Bairro", "Nome", "Telefone", "Agendamento de Visita"])
+                            
+                            df_unificado = pd.concat([df_antigo, df_novos_juntos], ignore_index=True)
+                            tamanho_banco_antigo = len(df_antigo)
+                        else:
+                            df_unificado = df_novos_juntos
+                            tamanho_banco_antigo = 0
+                        
+                        df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='last')
+                        
+                        # CORREÇÃO AQUI: Garante que as colunas existem antes de organizar alfabeticamente
+                        if 'Região/Bairro' in df_final.columns and 'Nome' in df_final.columns:
+                            df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
+                        
+                        tamanho_banco_novo = len(df_final)
+                        novos_adicionados = tamanho_banco_novo - tamanho_banco_antigo
+                        duplicadas_ignoradas = len(df_novos_juntos) - novos_adicionados
+                        
+                        df_final.to_csv(MASTER_DB_FILE, index=False)
+                        st.session_state.df_final = df_final
+                        
+                        st.success(f"✨ Sucesso! {novos_adicionados} contatos novos entraram na base.")
 
-    if st.session_state.df_final is not None:
+    if st.session_state.df_final is not None and not st.session_state.df_final.empty:
         df_resultado = st.session_state.df_final
         
         st.subheader("📊 Pré-visualização da Base Completa")
