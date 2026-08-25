@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# 2. CSS Customizado - Inspirado no Design "Gestão Online / AdminLTE"
+# 2. CSS Customizado - Design Moderno e Responsivo
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -27,12 +27,12 @@ st.markdown("""
     
     /* Botões Padrão Premium */
     .stButton>button { 
-        width: 100%; border-radius: 4px; font-weight: bold; 
+        width: 100%; border-radius: 6px; font-weight: bold; 
         background-color: #3c8dbc; color: white; border: none;
-        padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s ease;
+        padding: 12px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.15); transition: all 0.2s ease;
     }
     .stButton>button:hover {
-        background-color: #367fa9; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        background-color: #367fa9; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
     
     /* Caixa de Upload */
@@ -52,7 +52,6 @@ st.markdown("""
         color: #ffffff !important;
         font-weight: bold;
     }
-    /* Estilizando o menu de navegação na sidebar */
     div[role="radiogroup"] > label {
         padding: 10px;
         border-radius: 4px;
@@ -103,13 +102,58 @@ st.markdown("""
         border-bottom-left-radius: 4px;
         border-bottom-right-radius: 4px;
     }
-    /* Cores fiéis à imagem */
     .bg-aqua { background-color: #00c0ef !important; }
     .bg-yellow { background-color: #f39c12 !important; }
     .bg-green { background-color: #00a65a !important; }
     .bg-red { background-color: #dd4b39 !important; }
     </style>
 """, unsafe_allow_html=True)
+
+# ==========================================
+# MÓDULO DE SEGURANÇA: TELA DE LOGIN CLEAN
+# ==========================================
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+
+if not st.session_state.autenticado:
+    # Espaçamento superior
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    
+    # Layout responsivo centralizado
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    
+    with col2:
+        # Container com visual estilo Card Elevado
+        with st.container():
+            st.markdown("""
+                <div style='text-align: center; background-color: #ffffff; padding: 25px 25px 10px 25px; border-radius: 10px 10px 0 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); border-bottom: 3px solid #3c8dbc;'>
+                    <span style='font-size: 38px;'>🗺️</span>
+                    <h2 style='color: #222d32; font-weight: 700; margin-top: 5px; margin-bottom: 0px; letter-spacing: 1px;'>RADAR POLÍTICO</h2>
+                    <p style='color: #777; font-size: 14px; margin-top: 5px;'>Digite suas credenciais para acessar o painel</p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            with st.form("login_form"):
+                usuario = st.text_input("Usuário", placeholder="Digite seu usuário").strip().lower()
+                senha = st.text_input("Senha", type="password", placeholder="Digite sua senha")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                submit = st.form_submit_button("ENTRAR")
+                
+                if submit:
+                    if usuario == "tainara" and senha == "Star1137@":
+                        st.session_state.autenticado = True
+                        st.session_state.usuario_logado = "Tainara"
+                        st.rerun()
+                    elif usuario == "anderson" and senha == "Danuza@1980":
+                        st.session_state.autenticado = True
+                        st.session_state.usuario_logado = "Anderson"
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Usuário ou senha incorretos.")
+                        
+    st.stop()
+
 
 # --- NOMES DOS ARQUIVOS DE BANCO DE DADOS (MEMÓRIA PERMANENTE) ---
 MASTER_DB_FILE = "banco_dados_radar.csv"
@@ -223,10 +267,8 @@ def gerar_excel_final(df):
             df_vazio.to_excel(writer, index=False, sheet_name="Sem Dados")
             return output.getvalue()
 
-        # Calcula quantas pessoas tem em cada "Bairro"
         bairro_counts = df['Região/Bairro'].value_counts()
 
-        # Função inteligente que decide para qual aba o contato vai
         def determinar_aba(bairro):
             b = str(bairro).strip()
             b_lower = b.lower()
@@ -234,23 +276,19 @@ def gerar_excel_final(df):
             if b_lower == "sem bairro" or b_lower == "": 
                 return "Sem Bairro"
             
-            # Se a anotação for muito longa
             if len(b) > 25 or len(b.split()) > 4:
                 return "Sem Bairro"
                 
-            # Filtro expandido de palavras que não são bairros
             proibidas = ['ajuda', 'castrar', 'indicação', 'indicacao', 'ong', 'pedido', 'digital', 'shopping', 'conhecida', 'bolinhas', 'natal', 'castração', 'chefe', 'contato', 'técnica', 'tecnica', 'cao', 'cão', 'gata', 'gato', 'amiga', 'adocao', 'adoção']
             for p in proibidas:
                 if p in b_lower:
                     return "Sem Bairro"
                     
-            # A JUSTE AQUI: Se tem menos de 2 pessoas (ou seja, apenas 1), vai pra Sem Bairro. 2 ou mais ganha aba!
             if bairro_counts.get(bairro, 0) < 2:
                 return "Sem Bairro"
                 
             return b
 
-        # Cria uma cópia temporária só para gerar as abas, não afeta a planilha unificada
         df_temp = df.copy()
         df_temp['Aba_Destino'] = df_temp['Região/Bairro'].apply(determinar_aba)
         
@@ -272,7 +310,6 @@ def gerar_excel_final(df):
                 
             abas_usadas[aba] = nome_aba
                 
-            # Separa os dados para a aba específica, mas mantendo a coluna Bairro original!
             df_aba = df_temp[df_temp['Aba_Destino'] == aba].copy()
             if 'Agendamento de Visita' not in df_aba.columns:
                 df_aba['Agendamento de Visita'] = "" 
@@ -366,6 +403,12 @@ with st.sidebar:
             pass
             
     st.markdown("<h2 style='text-align: center; margin-top:-10px;'>RADAR POLÍTICO</h2>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #b8c7ce;'>Olá, <b>{st.session_state.usuario_logado}</b>!</p>", unsafe_allow_html=True)
+    
+    if st.button("🚪 Sair do Sistema"):
+        st.session_state.autenticado = False
+        st.rerun()
+        
     st.markdown("---")
     
     menu_selecionado = st.radio(
@@ -390,14 +433,12 @@ if menu_selecionado == "📈 Dashboard":
         total_agendamentos = len(df[df['Agendamento de Visita'].str.strip() != ""])
         total_bairros = len(df['Região/Bairro'].unique())
         
-        # Filtro de Bairro Superior
         lista_bairros = sorted(df['Região/Bairro'].unique())
         bairro_selecionado = st.selectbox("📌 Filtrar dados por Bairro:", lista_bairros)
         total_no_bairro = len(df[df['Região/Bairro'] == bairro_selecionado])
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Layout de 4 Colunas para os Cards
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -620,7 +661,6 @@ elif menu_selecionado == "🐾 Controle de Castração":
         with pd.ExcelWriter(output_castracao, engine='openpyxl') as writer:
             header_font = Font(bold=True)
             
-            # Aba 1: Ajuda / Castrar
             df_ajuda = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Ajuda / Castrar"][["Nome", "Telefone"]]
             if df_ajuda.empty:
                  df_ajuda = pd.DataFrame(columns=["Nome", "Telefone"])
@@ -632,7 +672,6 @@ elif menu_selecionado == "🐾 Controle de Castração":
             ws1.column_dimensions['A'].width = 30
             ws1.column_dimensions['B'].width = 25
             
-            # Aba 2: Adoção / Adotante
             df_adocao = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Adoção / Adotante"][["Nome", "Telefone"]]
             if df_adocao.empty:
                  df_adocao = pd.DataFrame(columns=["Nome", "Telefone"])
