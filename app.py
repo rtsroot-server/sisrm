@@ -116,14 +116,11 @@ if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    # Espaçamento superior
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     
-    # Layout responsivo centralizado
     col1, col2, col3 = st.columns([1, 1.2, 1])
     
     with col2:
-        # Container com visual estilo Card Elevado
         with st.container():
             st.markdown("""
                 <div style='text-align: center; background-color: #ffffff; padding: 25px 25px 10px 25px; border-radius: 10px 10px 0 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); border-bottom: 3px solid #3c8dbc;'>
@@ -141,9 +138,9 @@ if not st.session_state.autenticado:
                 submit = st.form_submit_button("ENTRAR")
                 
                 if submit:
-                    if usuario == "tainara" and senha == "Star1137@":
+                    if usuario == "radarpolitico" and senha == "Star1137@":
                         st.session_state.autenticado = True
-                        st.session_state.usuario_logado = "Tainara"
+                        st.session_state.usuario_logado = "Radar Político"
                         st.rerun()
                     elif usuario == "anderson" and senha == "Danuza@1980":
                         st.session_state.autenticado = True
