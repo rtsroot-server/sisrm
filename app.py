@@ -15,36 +15,99 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# 2. CSS Customizado
+# 2. CSS Customizado - Inspirado no Design "Gestão Online / AdminLTE"
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    .stApp { background-color: #f8f9fa; }
-    h1, h2, h3 { color: #1e3d59; font-family: 'Segoe UI', sans-serif; text-align: center; }
+    /* Cor de fundo do sistema (Cinza Claro) */
+    .stApp { background-color: #ecf0f5; }
+    h1, h2, h3 { color: #333333; font-family: 'Segoe UI', sans-serif; text-align: center; }
     
     /* Botões Padrão Premium */
     .stButton>button { 
-        width: 100%; border-radius: 8px; font-weight: bold; 
-        background-color: #17c3b2; color: white; border: none;
+        width: 100%; border-radius: 4px; font-weight: bold; 
+        background-color: #3c8dbc; color: white; border: none;
         padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s ease;
     }
     .stButton>button:hover {
-        background-color: #13a294; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        background-color: #367fa9; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.15);
     }
     
     /* Caixa de Upload */
     [data-testid="stFileUploadDropzone"] {
-        border-radius: 15px; border: 2px dashed #17c3b2; background-color: #ffffff;
+        border-radius: 8px; border: 2px dashed #3c8dbc; background-color: #ffffff;
         padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
     
-    /* Sidebar styling */
+    /* --- SIDEBAR CUSTOMIZADA (Dark Blue) --- */
     [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #e0e0e0;
+        background-color: #222d32 !important;
     }
+    [data-testid="stSidebar"] * {
+        color: #b8c7ce !important;
+    }
+    [data-testid="stSidebar"] h2 {
+        color: #ffffff !important;
+        font-weight: bold;
+    }
+    /* Estilizando o menu de navegação na sidebar */
+    div[role="radiogroup"] > label {
+        padding: 10px;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+    }
+    div[role="radiogroup"] > label:hover {
+        background-color: #1e282c;
+        color: #ffffff !important;
+    }
+    
+    /* --- CARDS DO DASHBOARD (Estilo AdminLTE) --- */
+    .small-box {
+        border-radius: 4px;
+        position: relative;
+        display: block;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+        color: #fff;
+        text-align: left;
+    }
+    .small-box > .inner {
+        padding: 20px;
+    }
+    .small-box h3 {
+        font-size: 45px;
+        font-weight: bold;
+        margin: 0 0 10px 0;
+        white-space: nowrap;
+        padding: 0;
+        color: #fff;
+        text-align: left;
+    }
+    .small-box p {
+        font-size: 18px;
+        margin-bottom: 0;
+        color: #fff;
+    }
+    .small-box-footer {
+        position: relative;
+        text-align: center;
+        padding: 5px 0;
+        color: rgba(255,255,255,0.8);
+        display: block;
+        z-index: 10;
+        background: rgba(0,0,0,0.15);
+        text-decoration: none;
+        font-size: 14px;
+        border-bottom-left-radius: 4px;
+        border-bottom-right-radius: 4px;
+    }
+    /* Cores fiéis à imagem */
+    .bg-aqua { background-color: #00c0ef !important; }
+    .bg-yellow { background-color: #f39c12 !important; }
+    .bg-green { background-color: #00a65a !important; }
+    .bg-red { background-color: #dd4b39 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -156,7 +219,7 @@ def gerar_excel_final(df):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         bairros = df['Região/Bairro'].unique()
         header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="17C3B2", end_color="17C3B2", fill_type="solid")
+        header_fill = PatternFill(start_color="3c8dbc", end_color="3c8dbc", fill_type="solid")
         abas_usadas = {} 
         
         for bairro in bairros:
@@ -196,7 +259,7 @@ def gerar_excel_unico(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="17C3B2", end_color="17C3B2", fill_type="solid")
+        header_fill = PatternFill(start_color="3c8dbc", end_color="3c8dbc", fill_type="solid")
         
         df_completo = df.copy()
         if 'Agendamento de Visita' not in df_completo.columns:
@@ -235,7 +298,6 @@ if 'df_castracao' not in st.session_state:
     if os.path.exists(CASTRACAO_DB_FILE):
         try:
             df_c = pd.read_csv(CASTRACAO_DB_FILE, dtype=str).fillna("")
-            # Garante que a planilha antiga seja atualizada para o novo formato
             if "Tipo" not in df_c.columns:
                 st.session_state.df_castracao = pd.DataFrame(columns=["Tipo", "Nome", "Telefone"])
             else:
@@ -258,7 +320,7 @@ with st.sidebar:
         except:
             pass
             
-    st.markdown("<h2 style='text-align: center; margin-top:-10px; color:#1e3d59;'>Radar Político</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; margin-top:-10px;'>RADAR POLÍTICO</h2>", unsafe_allow_html=True)
     st.markdown("---")
     
     menu_selecionado = st.radio(
@@ -270,8 +332,7 @@ with st.sidebar:
 # MÓDULO 1: DASHBOARD
 # ==========================================
 if menu_selecionado == "📈 Dashboard":
-    st.title("📈 Painel Geral")
-    st.write("Métricas resumidas da sua base de contatos.")
+    st.title("Painel Gerencial")
     st.markdown("---")
     
     if st.session_state.df_final is not None and not st.session_state.df_final.empty:
@@ -282,25 +343,61 @@ if menu_selecionado == "📈 Dashboard":
             
         total_cadastros = len(df)
         total_agendamentos = len(df[df['Agendamento de Visita'].str.strip() != ""])
+        total_bairros = len(df['Região/Bairro'].unique())
         
-        col_card1, col_card2 = st.columns(2)
-        with col_card1:
-            st.markdown(f'<div style="background-color:#ffffff; padding:20px; border-radius:10px; border-top:5px solid #17c3b2; box-shadow:0 4px 6px rgba(0,0,0,0.05); text-align:center;"><p style="font-weight:bold; color:#555; font-size:1.1rem; margin:0;">Total de Pessoas Cadastradas</p><h2 style="color:#17c3b2; font-size:3rem; margin:0;">{total_cadastros}</h2></div>', unsafe_allow_html=True)
-        with col_card2:
-            st.markdown(f'<div style="background-color:#ffffff; padding:20px; border-radius:10px; border-top:5px solid #17c3b2; box-shadow:0 4px 6px rgba(0,0,0,0.05); text-align:center;"><p style="font-weight:bold; color:#555; font-size:1.1rem; margin:0;">Total de Agendamentos</p><h2 style="color:#17c3b2; font-size:3rem; margin:0;">{total_agendamentos}</h2></div>', unsafe_allow_html=True)
-            
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.subheader("📍 Análise por Região")
-        st.write("Selecione um bairro para visualizar o volume específico de contatos cadastrados nele.")
-        
+        # Filtro de Bairro Superior
         lista_bairros = sorted(df['Região/Bairro'].unique())
-        bairro_selecionado = st.selectbox("Escolha o Bairro:", lista_bairros)
-        
+        bairro_selecionado = st.selectbox("📌 Filtrar dados por Bairro:", lista_bairros)
         total_no_bairro = len(df[df['Região/Bairro'] == bairro_selecionado])
         
-        col_filtro1, col_filtro2, col_filtro3 = st.columns([1, 2, 1])
-        with col_filtro2:
-            st.markdown(f'<div style="background-color:#ffffff; padding:20px; border-radius:10px; border-top:5px solid #ff9f1c; box-shadow:0 4px 6px rgba(0,0,0,0.05); text-align:center;"><p style="font-weight:bold; color:#555; font-size:1.1rem; margin:0;">Total em {bairro_selecionado}</p><h2 style="color:#ff9f1c; font-size:3rem; margin:0;">{total_no_bairro}</h2></div>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Layout de 4 Colunas para os Cards
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown(f'''
+            <div class="small-box bg-aqua">
+                <div class="inner">
+                    <h3>{total_cadastros}</h3>
+                    <p>Total de Contatos</p>
+                </div>
+                <div class="small-box-footer">Base Geral Atualizada</div>
+            </div>
+            ''', unsafe_allow_html=True)
+            
+        with col2:
+            st.markdown(f'''
+            <div class="small-box bg-yellow">
+                <div class="inner">
+                    <h3>{total_agendamentos}</h3>
+                    <p>Agendamentos</p>
+                </div>
+                <div class="small-box-footer">Visitas Marcadas</div>
+            </div>
+            ''', unsafe_allow_html=True)
+            
+        with col3:
+            st.markdown(f'''
+            <div class="small-box bg-green">
+                <div class="inner">
+                    <h3>{total_bairros}</h3>
+                    <p>Regiões Atendidas</p>
+                </div>
+                <div class="small-box-footer">Mapeamento Geográfico</div>
+            </div>
+            ''', unsafe_allow_html=True)
+            
+        with col4:
+            st.markdown(f'''
+            <div class="small-box bg-red">
+                <div class="inner">
+                    <h3>{total_no_bairro}</h3>
+                    <p>{bairro_selecionado}</p>
+                </div>
+                <div class="small-box-footer">Contatos neste Bairro</div>
+            </div>
+            ''', unsafe_allow_html=True)
             
     else:
         st.info("Sua base de dados está vazia no momento. Acesse o menu 'Processamento de Dados' para anexar suas planilhas.")
@@ -309,7 +406,7 @@ if menu_selecionado == "📈 Dashboard":
 # MÓDULO 2: PROCESSAMENTO DE DADOS
 # ==========================================
 elif menu_selecionado == "🔄 Processamento de Dados":
-    st.title("📱 Processamento de Dados")
+    st.title("Processamento de Dados")
     st.write("Unifique novas planilhas com a sua base salva automaticamente.")
 
     tamanho_atual = len(st.session_state.df_final) if st.session_state.df_final is not None else 0
@@ -333,7 +430,7 @@ elif menu_selecionado == "🔄 Processamento de Dados":
 
     if uploaded_files:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 Processar e Salvar no Banco", type="primary"):
+        if st.button("🚀 Processar e Salvar no Banco"):
             with st.spinner("Integrando novas planilhas ao seu banco de dados principal..."):
                 lista_dfs_novos = []
                 for file in uploaded_files:
@@ -395,7 +492,7 @@ elif menu_selecionado == "🔄 Processamento de Dados":
                 label="📥 Baixar Planilha Separada", 
                 data=excel_pronto_abas, 
                 file_name="Radar_Politico_Abas.xlsx", 
-                type="primary",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
             
@@ -404,7 +501,7 @@ elif menu_selecionado == "🔄 Processamento de Dados":
                 label="📥 Baixar Dados Completos (Com Nº)", 
                 data=excel_pronto_unico, 
                 file_name="Radar_Politico_Completo.xlsx", 
-                type="primary",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
 
@@ -421,7 +518,7 @@ elif menu_selecionado == "🔄 Processamento de Dados":
 # MÓDULO 3: CONTROLE DE CASTRAÇÃO E ADOÇÃO
 # ==========================================
 elif menu_selecionado == "🐾 Controle de Castração":
-    st.title("🐾 Controle de Castração e Adoção")
+    st.title("Controle de Castração e Adoção")
     st.write("Gerencie os pedidos de ajuda. Os dados são salvos automaticamente.")
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -429,10 +526,8 @@ elif menu_selecionado == "🐾 Controle de Castração":
     with st.form("form_castracao", clear_on_submit=True):
         st.subheader("Novo Cadastro")
         
-        # 1. Nova Opção de Escolha (Selectbox)
         tipo_input = st.selectbox("Selecione a Categoria:", ["Ajuda / Castrar", "Adoção / Adotante"])
         
-        # 2. Campos de Nome e Telefone
         col_form1, col_form2 = st.columns(2)
         with col_form1:
             nome_input = st.text_input("Nome", placeholder="Ex: Maria da Silva")
@@ -459,7 +554,6 @@ elif menu_selecionado == "🐾 Controle de Castração":
     st.subheader("Base de Registros")
     st.info("💡 **Dica:** Para **Alterar**, clique duas vezes na célula da tabela abaixo. Para **Excluir**, selecione a linha no quadrado à esquerda e aperte a lixeira!")
 
-    # O Painel Logo Abaixo
     df_atualizado = st.data_editor(
         st.session_state.df_castracao,
         num_rows="dynamic",
@@ -473,12 +567,11 @@ elif menu_selecionado == "🐾 Controle de Castração":
 
     if not st.session_state.df_castracao.empty:
         
-        # 3. Gerador de Planilha Exato conforme a "Pasta1 (1).xlsx"
         output_castracao = io.BytesIO()
         with pd.ExcelWriter(output_castracao, engine='openpyxl') as writer:
             header_font = Font(bold=True)
             
-            # --- ABA 1: Ajuda / Castrar ---
+            # Aba 1: Ajuda / Castrar
             df_ajuda = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Ajuda / Castrar"][["Nome", "Telefone"]]
             df_ajuda.to_excel(writer, index=False, startrow=1, sheet_name="Planilha1", header=False)
             ws1 = writer.sheets["Planilha1"]
@@ -488,7 +581,7 @@ elif menu_selecionado == "🐾 Controle de Castração":
             ws1.column_dimensions['A'].width = 30
             ws1.column_dimensions['B'].width = 25
             
-            # --- ABA 2: Adoção / Adotante ---
+            # Aba 2: Adoção / Adotante
             df_adocao = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Adoção / Adotante"][["Nome", "Telefone"]]
             df_adocao.to_excel(writer, index=False, startrow=1, sheet_name="Planilha2", header=False)
             ws2 = writer.sheets["Planilha2"]
@@ -500,8 +593,9 @@ elif menu_selecionado == "🐾 Controle de Castração":
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.download_button(
-            label="📥 Baixar Planilha", 
+            label="📥 Baixar Planilha de Controle", 
             data=output_castracao.getvalue(), 
             file_name="Controle_Castracao.xlsx", 
-            type="primary"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
         )
