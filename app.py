@@ -181,14 +181,14 @@ def processar_planilha(df):
     
     for c in df.columns:
         c_lower = str(c).lower().strip()
-        if c_lower in ['telefone', 'celular', 'contato', 'numero']:
-            tel_col = c
-        elif 'nome' in c_lower or 'cliente' in c_lower:
-            nome_col = c
-        elif c_lower in ['região', 'regiao', 'bairro', 'unnamed: 1']:
-            bairro_col = c
+        if c_lower in ['telefone', 'celular', 'contato', 'numero', 'phone 1 - value']:
+            if tel_col is None: tel_col = c
+        elif 'nome' in c_lower or 'cliente' in c_lower or c_lower == 'first name':
+            if nome_col is None: nome_col = c
+        elif c_lower in ['região', 'regiao', 'bairro', 'unnamed: 1', 'address 1 - city', 'address 1 - region']:
+            if bairro_col is None: bairro_col = c
         elif 'agendamento' in c_lower or 'visita' in c_lower:
-            agendamento_col = c
+            if agendamento_col is None: agendamento_col = c
 
     dados_padronizados = []
     
@@ -212,18 +212,55 @@ def processar_planilha(df):
                 "Agendamento de Visita": a_raw
             })
             
-    return pd.DataFrame(dados_padronizados)
+    return pd.DataFrame(dados_padronizados, columns=["Região/Bairro", "Nome", "Telefone", "Agendamento de Visita"])
 
 def gerar_excel_final(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        bairros = df['Região/Bairro'].unique()
+        
+        if df is None or df.empty or 'Região/Bairro' not in df.columns:
+            df_vazio = pd.DataFrame(columns=["Região/Bairro", "Nome", "Telefone", "Agendamento de Visita"])
+            df_vazio.to_excel(writer, index=False, sheet_name="Sem Dados")
+            return output.getvalue()
+
+        # Calcula quantas pessoas tem em cada "Bairro"
+        bairro_counts = df['Região/Bairro'].value_counts()
+
+        # Função inteligente que decide para qual aba o contato vai
+        def determinar_aba(bairro):
+            b = str(bairro).strip()
+            b_lower = b.lower()
+            
+            if b_lower == "sem bairro" or b_lower == "": 
+                return "Sem Bairro"
+            
+            # Se a anotação for muito longa
+            if len(b) > 25 or len(b.split()) > 4:
+                return "Sem Bairro"
+                
+            # Filtro expandido de palavras que não são bairros
+            proibidas = ['ajuda', 'castrar', 'indicação', 'indicacao', 'ong', 'pedido', 'digital', 'shopping', 'conhecida', 'bolinhas', 'natal', 'castração', 'chefe', 'contato', 'técnica', 'tecnica', 'cao', 'cão', 'gata', 'gato', 'amiga', 'adocao', 'adoção']
+            for p in proibidas:
+                if p in b_lower:
+                    return "Sem Bairro"
+                    
+            # A JUSTE AQUI: Se tem menos de 2 pessoas (ou seja, apenas 1), vai pra Sem Bairro. 2 ou mais ganha aba!
+            if bairro_counts.get(bairro, 0) < 2:
+                return "Sem Bairro"
+                
+            return b
+
+        # Cria uma cópia temporária só para gerar as abas, não afeta a planilha unificada
+        df_temp = df.copy()
+        df_temp['Aba_Destino'] = df_temp['Região/Bairro'].apply(determinar_aba)
+        
+        abas = df_temp['Aba_Destino'].unique()
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="3c8dbc", end_color="3c8dbc", fill_type="solid")
         abas_usadas = {} 
         
-        for bairro in bairros:
-            nome_limpo_excel = re.sub(r'[\\/*?:\[\]]', '-', str(bairro)).strip()
+        for aba in abas:
+            nome_limpo_excel = re.sub(r'[\\/*?:\[\]]', '-', str(aba)).strip()
             nome_aba_base = nome_limpo_excel[:31] if nome_limpo_excel[:31] else "Sem Bairro"
                 
             nome_aba = nome_aba_base
@@ -233,16 +270,18 @@ def gerar_excel_final(df):
                 nome_aba = nome_aba_base[:31 - len(sufixo)] + sufixo
                 contador += 1
                 
-            abas_usadas[bairro] = nome_aba
+            abas_usadas[aba] = nome_aba
                 
-            df_bairro = df[df['Região/Bairro'] == bairro].copy()
-            if 'Agendamento de Visita' not in df_bairro.columns:
-                df_bairro['Agendamento de Visita'] = "" 
-            df_bairro = df_bairro[['Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
-            df_bairro.to_excel(writer, index=False, sheet_name=nome_aba)
+            # Separa os dados para a aba específica, mas mantendo a coluna Bairro original!
+            df_aba = df_temp[df_temp['Aba_Destino'] == aba].copy()
+            if 'Agendamento de Visita' not in df_aba.columns:
+                df_aba['Agendamento de Visita'] = "" 
+            
+            df_aba = df_aba[['Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
+            df_aba.to_excel(writer, index=False, sheet_name=nome_aba)
             
             worksheet = writer.sheets[nome_aba]
-            for col_num, column_title in enumerate(df_bairro.columns, 1):
+            for col_num, column_title in enumerate(df_aba.columns, 1):
                 col_letra = get_column_letter(col_num)
                 if column_title == 'Nome': worksheet.column_dimensions[col_letra].width = 35
                 elif column_title == 'Agendamento de Visita': worksheet.column_dimensions[col_letra].width = 40
@@ -258,6 +297,12 @@ def gerar_excel_final(df):
 def gerar_excel_unico(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        
+        if df is None or df.empty:
+            df_vazio = pd.DataFrame(columns=['Nº', 'Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita'])
+            df_vazio.to_excel(writer, index=False, sheet_name="Dados Completos")
+            return output.getvalue()
+            
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="3c8dbc", end_color="3c8dbc", fill_type="solid")
         
@@ -463,12 +508,16 @@ elif menu_selecionado == "🔄 Processamento de Dados":
                         df_unificado = df_novos_juntos
                         tamanho_banco_antigo = 0
                     
-                    df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='last')
-                    df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
+                    if 'Telefone' in df_unificado.columns:
+                        df_final = df_unificado.drop_duplicates(subset=['Telefone'], keep='last')
+                    else:
+                        df_final = df_unificado
+                        
+                    if 'Região/Bairro' in df_final.columns and 'Nome' in df_final.columns:
+                        df_final = df_final.sort_values(by=['Região/Bairro', 'Nome'])
                     
                     tamanho_banco_novo = len(df_final)
                     novos_adicionados = tamanho_banco_novo - tamanho_banco_antigo
-                    duplicadas_ignoradas = len(df_novos_juntos) - novos_adicionados
                     
                     df_final.to_csv(MASTER_DB_FILE, index=False)
                     st.session_state.df_final = df_final
@@ -573,6 +622,8 @@ elif menu_selecionado == "🐾 Controle de Castração":
             
             # Aba 1: Ajuda / Castrar
             df_ajuda = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Ajuda / Castrar"][["Nome", "Telefone"]]
+            if df_ajuda.empty:
+                 df_ajuda = pd.DataFrame(columns=["Nome", "Telefone"])
             df_ajuda.to_excel(writer, index=False, startrow=1, sheet_name="Planilha1", header=False)
             ws1 = writer.sheets["Planilha1"]
             ws1.cell(row=1, column=1, value="ajuda/ castrar").font = header_font
@@ -583,6 +634,8 @@ elif menu_selecionado == "🐾 Controle de Castração":
             
             # Aba 2: Adoção / Adotante
             df_adocao = st.session_state.df_castracao[st.session_state.df_castracao["Tipo"] == "Adoção / Adotante"][["Nome", "Telefone"]]
+            if df_adocao.empty:
+                 df_adocao = pd.DataFrame(columns=["Nome", "Telefone"])
             df_adocao.to_excel(writer, index=False, startrow=1, sheet_name="Planilha2", header=False)
             ws2 = writer.sheets["Planilha2"]
             ws2.cell(row=1, column=1, value="adoção/adotante").font = header_font
