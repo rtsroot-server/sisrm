@@ -151,7 +151,6 @@ if not st.session_state.autenticado:
                         
     st.stop()
 
-
 # --- NOMES DOS ARQUIVOS DE BANCO DE DADOS (MEMÓRIA PERMANENTE) ---
 MASTER_DB_FILE = "banco_dados_radar.csv"
 CASTRACAO_DB_FILE = "banco_castracao_radar.csv"
@@ -255,6 +254,7 @@ def processar_planilha(df):
             
     return pd.DataFrame(dados_padronizados, columns=["Região/Bairro", "Nome", "Telefone", "Agendamento de Visita"])
 
+# --- FUNÇÃO ATUALIZADA: CRIA ABAS PARA TODOS OS BAIRROS SEM TRAVAS ---
 def gerar_excel_final(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -264,38 +264,14 @@ def gerar_excel_final(df):
             df_vazio.to_excel(writer, index=False, sheet_name="Sem Dados")
             return output.getvalue()
 
-        bairro_counts = df['Região/Bairro'].value_counts()
-
-        def determinar_aba(bairro):
-            b = str(bairro).strip()
-            b_lower = b.lower()
-            
-            if b_lower == "sem bairro" or b_lower == "": 
-                return "Sem Bairro"
-            
-            if len(b) > 25 or len(b.split()) > 4:
-                return "Sem Bairro"
-                
-            proibidas = ['ajuda', 'castrar', 'indicação', 'indicacao', 'ong', 'pedido', 'digital', 'shopping', 'conhecida', 'bolinhas', 'natal', 'castração', 'chefe', 'contato', 'técnica', 'tecnica', 'cao', 'cão', 'gata', 'gato', 'amiga', 'adocao', 'adoção']
-            for p in proibidas:
-                if p in b_lower:
-                    return "Sem Bairro"
-                    
-            if bairro_counts.get(bairro, 0) < 2:
-                return "Sem Bairro"
-                
-            return b
-
-        df_temp = df.copy()
-        df_temp['Aba_Destino'] = df_temp['Região/Bairro'].apply(determinar_aba)
-        
-        abas = df_temp['Aba_Destino'].unique()
+        # Seleciona todos os bairros únicos da base
+        bairros = df['Região/Bairro'].unique()
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="3c8dbc", end_color="3c8dbc", fill_type="solid")
         abas_usadas = {} 
         
-        for aba in abas:
-            nome_limpo_excel = re.sub(r'[\\/*?:\[\]]', '-', str(aba)).strip()
+        for bairro in bairros:
+            nome_limpo_excel = re.sub(r'[\\/*?:\[\]]', '-', str(bairro)).strip()
             nome_aba_base = nome_limpo_excel[:31] if nome_limpo_excel[:31] else "Sem Bairro"
                 
             nome_aba = nome_aba_base
@@ -305,17 +281,17 @@ def gerar_excel_final(df):
                 nome_aba = nome_aba_base[:31 - len(sufixo)] + sufixo
                 contador += 1
                 
-            abas_usadas[aba] = nome_aba
+            abas_usadas[bairro] = nome_aba
                 
-            df_aba = df_temp[df_temp['Aba_Destino'] == aba].copy()
-            if 'Agendamento de Visita' not in df_aba.columns:
-                df_aba['Agendamento de Visita'] = "" 
+            df_bairro = df[df['Região/Bairro'] == bairro].copy()
+            if 'Agendamento de Visita' not in df_bairro.columns:
+                df_bairro['Agendamento de Visita'] = "" 
             
-            df_aba = df_aba[['Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
-            df_aba.to_excel(writer, index=False, sheet_name=nome_aba)
+            df_bairro = df_bairro[['Região/Bairro', 'Nome', 'Telefone', 'Agendamento de Visita']]
+            df_bairro.to_excel(writer, index=False, sheet_name=nome_aba)
             
             worksheet = writer.sheets[nome_aba]
-            for col_num, column_title in enumerate(df_aba.columns, 1):
+            for col_num, column_title in enumerate(df_bairro.columns, 1):
                 col_letra = get_column_letter(col_num)
                 if column_title == 'Nome': worksheet.column_dimensions[col_letra].width = 35
                 elif column_title == 'Agendamento de Visita': worksheet.column_dimensions[col_letra].width = 40
@@ -388,7 +364,6 @@ if 'df_castracao' not in st.session_state:
 
 if 'uploader_key' not in st.session_state:
     st.session_state.uploader_key = 0
-
 
 # --- NAVEGAÇÃO LATERAL ---
 with st.sidebar:
